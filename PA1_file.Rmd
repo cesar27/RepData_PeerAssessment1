@@ -1,0 +1,104 @@
+---
+title: "Reproducible Reseach / Peer Assessment 1"
+author: "Cesar Bustos"
+date: "Monday, July 13, 2015"
+output: html_document
+---
+
+Loading and preprocessing the data
+
+```{r, echo=TRUE}
+# Read the CSV file
+data <- read.csv("activity.csv")      
+# Convert date column to date data type
+data$date <- as.Date(data$date)
+```
+
+
+**What is mean total number of steps taken per day?**
+
+For this part of the assignment, you can ignore the missing values in the dataset.
+
+    1. Calculate the total number of steps taken per day
+    2. If you do not understand the difference between a histogram and a barplot, research the difference between them. Make a histogram of the total number of steps taken each day
+    3. Calculate and report the mean and median of the total number of steps taken per day
+
+
+```{r, echo=TRUE}
+##Eliminate the na values
+total_steps <- aggregate(steps ~ date, data = data, sum, na.rm = TRUE)
+##Plot the dataset
+hist(total_steps$steps, main = "Total Steps", xlab="Total number of steps taken each day", col="blue")
+mean(total_steps$steps)
+median(total_steps$steps)
+```
+
+**What is the average daily activity pattern?**
+
+    1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+    2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+
+
+```{r, echo=TRUE}
+library(ggplot2)
+average <- aggregate(x=list(steps=data$steps), by=list(interval=data$interval), FUN=mean, na.rm=TRUE)
+ggplot(data=average, aes(x=interval, y=steps)) + geom_line() + 
+  xlab("# of step count") + ylab("5-minute Interval")
+average[which.max(average$steps),]
+```
+
+**Imputing missing values**
+
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+    1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)    
+```{r, echo=TRUE}
+##Finding missing values
+missing_values <- is.na(data$steps)
+## 2304 NAs rows
+table(missing_values)
+```    
+    2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+    3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+    4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+```{r, echo=TRUE}
+library(sqldf)
+query <- sqldf('select d.*, a.steps as value
+                from "average" as a
+                join "data" d on d.interval=a.interval')
+query$steps[is.na(query$steps)] <- query$value[is.na(query$steps)]
+##Query total steps
+query_ts <- as.integer (sqldf('select sum(steps)
+                     from query'))
+##Query total steps by day
+query_tsbd <- sqldf('select date, sum(steps) as steps_by_day
+                       from query
+                   group by date')
+query_final <- sqldf('select date, steps_by_day
+                        from query_tsbd')
+hist(query_final$steps_by_day, main= "Steps by day", breaks=10
+                 , xlab=" Total of steps taken each day", col="blue")
+mean_steps   <- query_ts / NROW(query_tsbd)
+mean_steps
+```    
+
+**Are there differences in activity patterns between weekdays and weekends?**
+
+For this part the weekdays() function may be of some help here. Use the dataset with the filled in missing values for this part.
+
+  1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+  2. Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). See the README file in the GitHub repository to see an example of what this plot should look like using simulated data.
+
+```{r}
+query$weektime <- as.factor(ifelse(weekdays(query_final$date) %in%
+                          c("Sábado", "Domingo"), "weekend", "weekday"))
+query2 <- sqldf('select interval, avg(steps) as avg_steps,  weektime
+                  from query
+              group by interval, weektime
+               ')
+library("lattice")
+graphics <- xyplot(avg_steps ~ interval | factor(weektime), data=query2,
+                   type = 'l', main="Hola", xlab="Hola2", ylab="Hola3", grid ="TRUE")
+graphics
+```
+
